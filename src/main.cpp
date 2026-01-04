@@ -1,13 +1,14 @@
 #include "core/Container.h"
+#include "core/Logger.h"
 #include <iostream>
 #include <string>
 #include <vector>
 #include <cstring>
 
 void print_usage(const char* prog_name) {
-    std::cerr << "Usage: " << prog_name << " --cmd <command> [args...]" << std::endl;
-    std::cerr << "Example: " << prog_name << " --cmd /bin/sh" << std::endl;
-    std::cerr << "Example: " << prog_name << " --cmd /bin/echo Hello World" << std::endl;
+    safebox::Logger::log("Usage: " + std::string(prog_name) + " --cmd <command> [args...]", safebox::Logger::Level::ERROR);
+    safebox::Logger::log("Example: " + std::string(prog_name) + " --cmd /bin/sh", safebox::Logger::Level::ERROR);
+    safebox::Logger::log("Example: " + std::string(prog_name) + " --cmd /bin/echo Hello World", safebox::Logger::Level::ERROR);
 }
 
 int main(int argc, char** argv) {

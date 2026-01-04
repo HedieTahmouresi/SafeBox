@@ -1,4 +1,5 @@
 #include "core/CGroupManager.h"
+#include "core/Logger.h"
 #include <fstream>
 #include <iostream>
 #include <sys/stat.h>
@@ -11,22 +12,22 @@ namespace safebox {
 bool CGroupManager::write_file(const std::string& path, const std::string& value) {
     std::ofstream ofs(path);
     if (!ofs.is_open()) {
-        std::cerr << "[Cgroup] Failed to open " << path << ": " << strerror(errno) << std::endl;
+        Logger::log("[Cgroup] Failed to open " + path + ": " + std::string(strerror(errno)), Logger::Level::ERROR);
         return false;
     }
     ofs << value;
     if (ofs.fail()) {
-        std::cerr << "[Cgroup] Failed to write to " << path << ": " << strerror(errno) << std::endl;
+        Logger::log("[Cgroup] Failed to write to " + path + ": " + std::string(strerror(errno)), Logger::Level::ERROR);
         return false;
     }
     return true;
 }
 
 bool CGroupManager::setup(pid_t pid, size_t memory_limit_bytes, double cpu_percent) {
-    std::cout << "[Cgroup] Setting up limits for PID " << pid << "..." << std::endl;
+    Logger::log("[Cgroup] Setting up limits for PID " + std::to_string(pid), Logger::Level::INFO);
 
     if (mkdir(CGROUP_DIR, 0755) == -1 && errno != EEXIST) {
-        std::cerr << "[Cgroup] Failed to create dir: " << strerror(errno) << std::endl;
+        Logger::log("[Cgroup] Failed to create dir: " + std::string(strerror(errno)), Logger::Level::ERROR);
         return false;
     }
 
@@ -42,9 +43,9 @@ bool CGroupManager::setup(pid_t pid, size_t memory_limit_bytes, double cpu_perce
     std::string cpu_path = std::string(CGROUP_DIR) + "/cpu.max";
     
     if (!write_file(cpu_path, cpu_val)) {
-        std::cerr << "[Cgroup] Warning: Failed to set CPU limit (check cgroup2 delegation)." << std::endl;
+        Logger::log("[Cgroup] Warning: Failed to set CPU limit (check cgroup2 delegation).", Logger::Level::ERROR);
     } else {
-        std::cout << "[Cgroup] CPU Limit set to " << cpu_percent << "% (" << cpu_val << ")" << std::endl;
+        Logger::log("[Cgroup] CPU Limit set to " + std::to_string(cpu_percent) + "% (" + cpu_val + ")", Logger::Level::INFO);
     }
 
     std::string procs_path = std::string(CGROUP_DIR) + "/cgroup.procs";
@@ -56,10 +57,10 @@ bool CGroupManager::setup(pid_t pid, size_t memory_limit_bytes, double cpu_perce
 }
 
 void CGroupManager::cleanup() {
-    std::cout << "[Cgroup] Cleaning up..." << std::endl;
+    Logger::log("[Cgroup] Cleaning up...", Logger::Level::INFO);
     if (rmdir(CGROUP_DIR) == -1) {
         if (errno != ENOENT) {
-             std::cerr << "[Cgroup] Warning: Failed to remove cgroup dir: " << strerror(errno) << std::endl;
+             Logger::log("[Cgroup] Warning: Failed to remove cgroup dir: " + std::string(strerror(errno)), Logger::Level::ERROR);
         }
     }
 }

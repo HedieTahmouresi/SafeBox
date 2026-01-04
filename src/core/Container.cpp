@@ -3,6 +3,7 @@
 #include "core/Filesystem.h" 
 #include "core/Security.h"
 #include "core/Monitor.h"
+#include "core/Logger.h"
 #include <iostream>
 #include <sched.h>      
 #include <sys/wait.h>   
@@ -26,7 +27,7 @@ int Container::child_func(void* arg) {
     CloneArgs* args = static_cast<CloneArgs*>(arg);
     char ch;
     if (read(args->pipe_fd, &ch, 1) != 1) {
-        std::cerr << "[Child] Failed to read from sync pipe!" << std::endl;
+        Logger::log("[Child] Failed to read from sync pipe!", Logger::Level::ERROR);
         return 1;
     }
     close(args->pipe_fd);
@@ -38,7 +39,7 @@ void Container::run_child() {
     Filesystem::setup("../rootfs");
 
     if (sethostname(config.hostname.c_str(), config.hostname.size()) < 0) {
-        std::cerr << "[Child] Failed to set hostname." << std::endl;
+        Logger::log("[Child] Failed to set hostname.", Logger::Level::ERROR);
     }
 
     Security::enable_seccomp();
@@ -49,15 +50,15 @@ void Container::run_child() {
     }
     args.push_back(nullptr); 
 
-    std::cout << "[Child] Executing: " << config.command[0] << std::endl;
+    Logger::log("[Child] Executing: " + config.command[0], Logger::Level::INFO);
     execvp(args[0], args.data());
 
-    std::cerr << "[Child] execvp failed: " << strerror(errno) << std::endl;
+    Logger::log("[Child] execvp failed: " + std::string(strerror(errno)), Logger::Level::ERROR);
     exit(1);
 }
 
 void Container::run() {
-    std::cout << "[Parent] Creating child process..." << std::endl;
+    Logger::log("[Parent] Creating child process...", Logger::Level::INFO);
 
     int pipe_fds[2];
     if (pipe(pipe_fds) == -1) {
@@ -75,7 +76,7 @@ void Container::run() {
     );
 
     if (child_pid == -1) {
-        std::cerr << "[Parent] clone() failed: " << strerror(errno) << std::endl;
+        Logger::log("[Parent] clone() failed: " + std::string(strerror(errno)), Logger::Level::ERROR);
         close(pipe_fds[0]);
         close(pipe_fds[1]);
         return;
@@ -86,7 +87,7 @@ void Container::run() {
     if (CGroupManager::setup(child_pid, config.memory_limit, config.cpu_limit)) {
         write(pipe_fds[1], "X", 1);
     } else {
-        std::cerr << "[Parent] CGroup setup failed. Killing child." << std::endl;
+        Logger::log("[Parent] CGroup setup failed. Killing child.", Logger::Level::ERROR);
         kill(child_pid, SIGKILL);
         return;
     }
@@ -99,7 +100,7 @@ void Container::run() {
 
     monitor.stop(); 
 
-    std::cout << "[Parent] Child exited." << std::endl;
+    Logger::log("[Parent] Child exited.");
 
     CGroupManager::cleanup();
 }
