@@ -11,8 +11,11 @@ private:
     static constexpr size_t STACK_SIZE = 65536; 
     std::vector<char> child_stack;
 
-    static int child_func(void* arg);
+    void run_pivot_root(const char* new_root, const char* put_old);
+    
+    void setup_root(const char* root_path);
 
+    static int child_func(void* arg);
     void run_child();
 
 public:
@@ -21,5 +24,4 @@ public:
 };
 
 } 
-
-#endif 
+#endif
