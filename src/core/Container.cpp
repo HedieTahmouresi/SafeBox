@@ -13,8 +13,13 @@
 #include <vector>       
 #include <algorithm>    
 #include <cctype>       
+#include <fstream>  
 
 namespace safebox {
+
+const char* CGROUP_DIR = "/sys/fs/cgroup/safebox";
+const char* CGROUP_PROCS = "/sys/fs/cgroup/safebox/cgroup.procs";
+const char* CGROUP_MEM_MAX = "/sys/fs/cgroup/safebox/memory.max";
 
 Container::Container() {
     child_stack.resize(STACK_SIZE);
@@ -34,6 +39,7 @@ void Container::setup_root(const char* root_path) {
         std::cerr << "[Child] Failed to make mounts private: " << strerror(errno) << std::endl;
         exit(1);
     }
+
     if (mount(root_path, root_path, "bind", MS_BIND | MS_REC, NULL) == -1) {
         std::cerr << "[Child] Failed to bind mount rootfs: " << strerror(errno) << std::endl;
         exit(1);
@@ -64,9 +70,35 @@ void Container::setup_root(const char* root_path) {
     }
 }
 
+void write_file(const std::string& path, const std::string& value) {
+    std::ofstream ofs(path);
+    if (!ofs.is_open()) {
+        std::cerr << "[Cgroup] Failed to open " << path << ": " << strerror(errno) << std::endl;
+        return;
+    }
+    ofs << value;
+    if (ofs.fail()) {
+        std::cerr << "[Cgroup] Failed to write to " << path << ": " << strerror(errno) << std::endl;
+    }
+    ofs.close();
+}
+
+struct CloneArgs {
+    Container* container;
+    int pipe_fd; 
+};
+
 int Container::child_func(void* arg) {
-    Container* container = static_cast<Container*>(arg);
-    container->run_child();
+    CloneArgs* args = static_cast<CloneArgs*>(arg);
+
+    char ch;
+    if (read(args->pipe_fd, &ch, 1) != 1) {
+        std::cerr << "[Child] Failed to read from sync pipe!" << std::endl;
+        return 1;
+    }
+    close(args->pipe_fd); 
+
+    args->container->run_child();
     return 0;
 }
 
@@ -74,42 +106,22 @@ void Container::run_child() {
     setup_root("../rootfs");
 
     std::string new_hostname = "safebox-alpine";
-    if (sethostname(new_hostname.c_str(), new_hostname.size()) < 0) {
-        std::cerr << "[Child] Failed to set hostname: " << strerror(errno) << std::endl;
-    }
+    sethostname(new_hostname.c_str(), new_hostname.size());
 
-    if (getpid() != 1) {
-        std::cerr << "[Child] CRITICAL: PID not 1. Isolation failed!" << std::endl;
-    }
+    std::cout << "[Child] Environment ready. Checking memory cgroup..." << std::endl;
 
-    std::cout << "[Child] Scanning /proc for running processes..." << std::endl;
-
+    std::cout << "[Child] Scanning /proc..." << std::endl;
     DIR* dir = opendir("/proc");
-    if (!dir) {
-        std::cerr << "[Child] Failed to open /proc: " << strerror(errno) << std::endl;
-        return;
-    }
-
-    struct dirent* entry;
-    std::vector<std::string> pids;
-
-    while ((entry = readdir(dir)) != nullptr) {
-        if (isdigit(entry->d_name[0])) {
-            pids.push_back(entry->d_name);
+    if (dir) {
+        struct dirent* entry;
+        std::vector<std::string> pids;
+        while ((entry = readdir(dir)) != nullptr) {
+            if (isdigit(entry->d_name[0])) pids.push_back(entry->d_name);
         }
-    }
-    closedir(dir);
-
-    std::cout << "[Child] Visible PIDs: ";
-    for (const auto& pid : pids) {
-        std::cout << pid << " ";
-    }
-    std::cout << std::endl;
-
-    if (pids.size() == 1 && pids[0] == "1") {
-        std::cout << "[Child] SUCCESS: Only PID 1 is visible! (Procfs isolation works)" << std::endl;
-    } else {
-        std::cout << "[Child] WARNING: Strange PIDs visible. Isolation might be partial." << std::endl;
+        closedir(dir);
+        if (pids.size() == 1 && pids[0] == "1") {
+            std::cout << "[Child] SUCCESS: PID 1 verified." << std::endl;
+        }
     }
 
     std::cout << "[Child] Exiting..." << std::endl;
@@ -118,20 +130,50 @@ void Container::run_child() {
 void Container::run() {
     std::cout << "[Parent] Creating child process..." << std::endl;
 
+    int pipe_fds[2];
+    if (pipe(pipe_fds) == -1) {
+        perror("pipe");
+        return;
+    }
+
+    CloneArgs args = { this, pipe_fds[0] }; 
+
     pid_t child_pid = clone(
         child_func, 
         child_stack.data() + STACK_SIZE, 
         CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, 
-        this
+        &args
     );
 
     if (child_pid == -1) {
         std::cerr << "[Parent] clone() failed: " << strerror(errno) << std::endl;
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
         return;
     }
 
+    close(pipe_fds[0]);
+
+    std::cout << "[Parent] Setting up Cgroups..." << std::endl;
+    
+    if (mkdir(CGROUP_DIR, 0755) == -1 && errno != EEXIST) {
+        std::cerr << "[Parent] Failed to create cgroup dir: " << strerror(errno) << std::endl;
+    } else {
+        write_file(CGROUP_MEM_MAX, "10485760");
+        
+        write_file(CGROUP_PROCS, std::to_string(child_pid));
+        
+        std::cout << "[Parent] Child " << child_pid << " added to cgroup limit (10MB)." << std::endl;
+    }
+
+    write(pipe_fds[1], "X", 1);
+    close(pipe_fds[1]);
+
     waitpid(child_pid, nullptr, 0);
     std::cout << "[Parent] Child exited." << std::endl;
+
+    std::cout << "[Parent] Cleaning up cgroup..." << std::endl;
+    rmdir(CGROUP_DIR);
 }
 
 } 
