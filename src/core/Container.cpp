@@ -3,8 +3,8 @@
 #include <sched.h>      
 #include <sys/wait.h>   
 #include <sys/utsname.h>
-#include <unistd.h>    
-#include <cstring>     
+#include <unistd.h>     
+#include <cstring>      
 #include <cerrno>       
 
 namespace safebox {
@@ -16,11 +16,17 @@ Container::Container() {
 int Container::child_func(void* arg) {
     Container* container = static_cast<Container*>(arg);
     container->run_child();
-    return 0; 
+    return 0;
 }
 
 void Container::run_child() {
-    std::cout << "[Child] Inside container! PID: " << getpid() << std::endl;
+    pid_t pid = getpid();
+    std::cout << "[Child] Inside container! PID: " << pid << std::endl;
+
+    if (pid != 1) {
+        std::cerr << "[Child] CRITICAL ERROR: PID is not 1. Isolation failed!" << std::endl;
+        return;
+    }
 
     std::string new_hostname = "safebox-container";
     if (sethostname(new_hostname.c_str(), new_hostname.size()) < 0) {
@@ -42,7 +48,7 @@ void Container::run() {
     pid_t child_pid = clone(
         child_func, 
         child_stack.data() + STACK_SIZE, 
-        CLONE_NEWUTS | SIGCHLD, 
+        CLONE_NEWUTS | CLONE_NEWPID | SIGCHLD, 
         this
     );
 
@@ -62,4 +68,4 @@ void Container::run() {
     }
 }
 
-}
+} 
