@@ -2,6 +2,7 @@
 #include "core/CGroupManager.h"
 #include "core/Filesystem.h" 
 #include "core/Security.h"
+#include "core/Monitor.h"
 #include <iostream>
 #include <sched.h>      
 #include <sys/wait.h>   
@@ -87,13 +88,19 @@ void Container::run() {
     } else {
         std::cerr << "[Parent] CGroup setup failed. Killing child." << std::endl;
         kill(child_pid, SIGKILL);
+        return;
     }
     close(pipe_fds[1]);
 
+    Monitor monitor;
+    monitor.start(); 
+
     waitpid(child_pid, nullptr, 0);
+
+    monitor.stop(); 
+
     std::cout << "[Parent] Child exited." << std::endl;
 
     CGroupManager::cleanup();
 }
-
 }

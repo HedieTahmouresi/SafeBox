@@ -14,6 +14,7 @@ add_executable(safebox
     src/core/CGroupManager.cpp
     src/core/Filesystem.cpp  
     src/core/Security.cpp
+    src/core/Monitor.cpp
 )
 
-target_link_libraries(safebox seccomp)
+target_link_libraries(safebox seccomp pthread)

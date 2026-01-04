@@ -14,3 +14,5 @@ make
 
 echo "[BUILD] Running SafeBox..."
 sudo ./safebox --cpu 20 --cmd /bin/sh
+#sudo ./safebox --cpu 20 --cmd /bin/sh
+#sudo ./safebox --cmd /breakout
