@@ -7,14 +7,11 @@
 #include <unistd.h>     
 #include <cstring>      
 #include <cerrno>       
-#include <dirent.h>     
 #include <vector>       
-#include <algorithm>    
-#include <cctype>       
 
 namespace safebox {
 
-Container::Container() {
+Container::Container(ContainerConfig config) : config(std::move(config)) {
     child_stack.resize(STACK_SIZE);
 }
 
@@ -38,24 +35,21 @@ int Container::child_func(void* arg) {
 void Container::run_child() {
     Filesystem::setup("../rootfs");
 
-    std::string new_hostname = "safebox-alpine";
-    sethostname(new_hostname.c_str(), new_hostname.size());
-
-    std::cout << "[Child] Scanning /proc..." << std::endl;
-    DIR* dir = opendir("/proc");
-    if (dir) {
-        struct dirent* entry;
-        std::vector<std::string> pids;
-        while ((entry = readdir(dir)) != nullptr) {
-            if (isdigit(entry->d_name[0])) pids.push_back(entry->d_name);
-        }
-        closedir(dir);
-        if (pids.size() == 1 && pids[0] == "1") {
-            std::cout << "[Child] SUCCESS: PID 1 verified." << std::endl;
-        }
+    if (sethostname(config.hostname.c_str(), config.hostname.size()) < 0) {
+        std::cerr << "[Child] Failed to set hostname." << std::endl;
     }
 
-    std::cout << "[Child] Exiting..." << std::endl;
+    std::vector<char*> args;
+    for (const auto& arg : config.command) {
+        args.push_back(const_cast<char*>(arg.c_str()));
+    }
+    args.push_back(nullptr); 
+
+    std::cout << "[Child] Executing: " << config.command[0] << std::endl;
+    execvp(args[0], args.data());
+
+    std::cerr << "[Child] execvp failed: " << strerror(errno) << std::endl;
+    exit(1);
 }
 
 void Container::run() {
@@ -85,7 +79,7 @@ void Container::run() {
 
     close(pipe_fds[0]);
 
-    if (CGroupManager::setup(child_pid, 10 * 1024 * 1024)) { 
+    if (CGroupManager::setup(child_pid, 10 * 1024 * 1024)) {
         write(pipe_fds[1], "X", 1);
     } else {
         std::cerr << "[Parent] CGroup setup failed. Killing child." << std::endl;
@@ -99,4 +93,4 @@ void Container::run() {
     CGroupManager::cleanup();
 }
 
-} 
+}

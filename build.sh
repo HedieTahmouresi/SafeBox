@@ -13,4 +13,4 @@ echo "[BUILD] Compiling..."
 make
 
 echo "[BUILD] Running SafeBox..."
-sudo ./safebox
+sudo ./safebox --cmd /bin/sh
