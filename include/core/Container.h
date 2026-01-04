@@ -8,7 +8,9 @@ namespace safebox {
 
 struct ContainerConfig {
     std::string hostname = "safebox-container";
-    std::vector<std::string> command; 
+    std::vector<std::string> command;
+    size_t memory_limit = 10 * 1024 * 1024;
+    double cpu_limit = 50.0;                
 };
 
 class Container {

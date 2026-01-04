@@ -79,7 +79,7 @@ void Container::run() {
 
     close(pipe_fds[0]);
 
-    if (CGroupManager::setup(child_pid, 10 * 1024 * 1024)) {
+    if (CGroupManager::setup(child_pid, config.memory_limit, config.cpu_limit)) {
         write(pipe_fds[1], "X", 1);
     } else {
         std::cerr << "[Parent] CGroup setup failed. Killing child." << std::endl;

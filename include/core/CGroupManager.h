@@ -10,7 +10,7 @@ class CGroupManager {
 public:
     static constexpr const char* CGROUP_DIR = "/sys/fs/cgroup/safebox";
     
-    static bool setup(pid_t pid, size_t memory_limit_bytes);
+    static bool setup(pid_t pid, size_t memory_limit_bytes, double cpu_percent);
 
     static void cleanup();
 

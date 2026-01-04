@@ -19,15 +19,19 @@ int main(int argc, char** argv) {
     safebox::ContainerConfig config;
     bool cmd_found = false;
 
-    // Basic Argument Parser
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--cmd") == 0) {
             cmd_found = true;
-            // Everything after --cmd is part of the command
             for (int j = i + 1; j < argc; ++j) {
                 config.command.push_back(argv[j]);
             }
             break; 
+        } else if (strcmp(argv[i], "--cpu") == 0 && i + 1 < argc) {
+            config.cpu_limit = std::stod(argv[i + 1]);
+            i++;
+        } else if (strcmp(argv[i], "--mem") == 0 && i + 1 < argc) {
+            config.memory_limit = static_cast<size_t>(std::stoul(argv[i + 1]) * 1024 * 1024);
+            i++; 
         }
     }
 
