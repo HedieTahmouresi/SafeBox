@@ -12,4 +12,5 @@ add_executable(safebox
     src/main.cpp 
     src/core/Container.cpp
     src/core/CGroupManager.cpp
+    src/core/Filesystem.cpp  
 )
