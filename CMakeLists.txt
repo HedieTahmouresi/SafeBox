@@ -11,4 +11,5 @@ include_directories(include)
 add_executable(safebox 
     src/main.cpp 
     src/core/Container.cpp
+    src/core/CGroupManager.cpp
 )

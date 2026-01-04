@@ -1,4 +1,5 @@
 #include "core/Container.h"
+#include "core/CGroupManager.h"
 #include <iostream>
 #include <sched.h>      
 #include <sys/wait.h>   
@@ -13,13 +14,8 @@
 #include <vector>       
 #include <algorithm>    
 #include <cctype>       
-#include <fstream>  
 
 namespace safebox {
-
-const char* CGROUP_DIR = "/sys/fs/cgroup/safebox";
-const char* CGROUP_PROCS = "/sys/fs/cgroup/safebox/cgroup.procs";
-const char* CGROUP_MEM_MAX = "/sys/fs/cgroup/safebox/memory.max";
 
 Container::Container() {
     child_stack.resize(STACK_SIZE);
@@ -70,19 +66,6 @@ void Container::setup_root(const char* root_path) {
     }
 }
 
-void write_file(const std::string& path, const std::string& value) {
-    std::ofstream ofs(path);
-    if (!ofs.is_open()) {
-        std::cerr << "[Cgroup] Failed to open " << path << ": " << strerror(errno) << std::endl;
-        return;
-    }
-    ofs << value;
-    if (ofs.fail()) {
-        std::cerr << "[Cgroup] Failed to write to " << path << ": " << strerror(errno) << std::endl;
-    }
-    ofs.close();
-}
-
 struct CloneArgs {
     Container* container;
     int pipe_fd; 
@@ -90,14 +73,12 @@ struct CloneArgs {
 
 int Container::child_func(void* arg) {
     CloneArgs* args = static_cast<CloneArgs*>(arg);
-
     char ch;
     if (read(args->pipe_fd, &ch, 1) != 1) {
         std::cerr << "[Child] Failed to read from sync pipe!" << std::endl;
         return 1;
     }
-    close(args->pipe_fd); 
-
+    close(args->pipe_fd);
     args->container->run_child();
     return 0;
 }
@@ -107,8 +88,6 @@ void Container::run_child() {
 
     std::string new_hostname = "safebox-alpine";
     sethostname(new_hostname.c_str(), new_hostname.size());
-
-    std::cout << "[Child] Environment ready. Checking memory cgroup..." << std::endl;
 
     std::cout << "[Child] Scanning /proc..." << std::endl;
     DIR* dir = opendir("/proc");
@@ -136,7 +115,7 @@ void Container::run() {
         return;
     }
 
-    CloneArgs args = { this, pipe_fds[0] }; 
+    CloneArgs args = { this, pipe_fds[0] };
 
     pid_t child_pid = clone(
         child_func, 
@@ -154,26 +133,18 @@ void Container::run() {
 
     close(pipe_fds[0]);
 
-    std::cout << "[Parent] Setting up Cgroups..." << std::endl;
-    
-    if (mkdir(CGROUP_DIR, 0755) == -1 && errno != EEXIST) {
-        std::cerr << "[Parent] Failed to create cgroup dir: " << strerror(errno) << std::endl;
+    if (CGroupManager::setup(child_pid, 10 * 1024 * 1024)) { 
+        write(pipe_fds[1], "X", 1);
     } else {
-        write_file(CGROUP_MEM_MAX, "10485760");
-        
-        write_file(CGROUP_PROCS, std::to_string(child_pid));
-        
-        std::cout << "[Parent] Child " << child_pid << " added to cgroup limit (10MB)." << std::endl;
+        std::cerr << "[Parent] CGroup setup failed. Killing child." << std::endl;
+        kill(child_pid, SIGKILL);
     }
-
-    write(pipe_fds[1], "X", 1);
     close(pipe_fds[1]);
 
     waitpid(child_pid, nullptr, 0);
     std::cout << "[Parent] Child exited." << std::endl;
 
-    std::cout << "[Parent] Cleaning up cgroup..." << std::endl;
-    rmdir(CGROUP_DIR);
+    CGroupManager::cleanup();
 }
 
 } 
