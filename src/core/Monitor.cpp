@@ -4,6 +4,8 @@
 #include <fstream>
 #include <chrono>
 #include <iomanip>
+#include <sys/ioctl.h> 
+#include <unistd.h>   
 
 namespace safebox {
 
@@ -35,26 +37,17 @@ std::string Monitor::read_value(const std::string& path) {
 void Monitor::display_stats() {
     std::string mem_path = std::string(CGroupManager::CGROUP_DIR) + "/memory.current";
     
+    std::ofstream log_file("safebox_usage.log", std::ios::app);
+
     while (running) {
         std::string current_mem = read_value(mem_path);
-        double mem_mb = std::stod(current_mem) / 1024.0 / 1024.0;
+        try {
+            double mem_mb = std::stod(current_mem) / 1024.0 / 1024.0;
+            
+            log_file << "[MONITOR] Memory Usage: " << mem_mb << " MB" << std::endl;
+        } catch (...) {}
 
-        // ANSI ESCAPE SEQUENCE BREAKDOWN:
-        // \033[s  -> Save current cursor position
-        // \033[H  -> Move cursor to Home (0,0)
-        // \033[K  -> Clear the entire line
-        // \033[u  -> Restore saved cursor position
-        std::cout << "\033[s"            
-                  << "\033[H"            
-                  << "\033[1;33m"        // Set color to Yellow
-                  << "[SafeBox Monitor] Memory Usage: " 
-                  << std::fixed << std::setprecision(2) << mem_mb << " MB"
-                  << "\033[0m"           // Reset color
-                  << "\033[K"            
-                  << "\033[u"            
-                  << std::flush;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }
 
