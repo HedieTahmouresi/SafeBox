@@ -13,4 +13,7 @@ add_executable(safebox
     src/core/Container.cpp
     src/core/CGroupManager.cpp
     src/core/Filesystem.cpp  
+    src/core/Security.cpp
 )
+
+target_link_libraries(safebox seccomp)

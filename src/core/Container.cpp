@@ -1,6 +1,7 @@
 #include "core/Container.h"
 #include "core/CGroupManager.h"
 #include "core/Filesystem.h" 
+#include "core/Security.h"
 #include <iostream>
 #include <sched.h>      
 #include <sys/wait.h>   
@@ -38,6 +39,8 @@ void Container::run_child() {
     if (sethostname(config.hostname.c_str(), config.hostname.size()) < 0) {
         std::cerr << "[Child] Failed to set hostname." << std::endl;
     }
+
+    Security::enable_seccomp();
 
     std::vector<char*> args;
     for (const auto& arg : config.command) {
