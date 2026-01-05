@@ -15,6 +15,7 @@ add_executable(safebox
     src/core/Filesystem.cpp  
     src/core/Security.cpp
     src/core/Monitor.cpp
+    src/core/NetworkManager.cpp
 )
 
 target_link_libraries(safebox seccomp pthread)

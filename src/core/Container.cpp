@@ -4,6 +4,7 @@
 #include "core/Security.h"
 #include "core/Monitor.h"
 #include "core/Logger.h"
+#include "core/NetworkManager.h"
 #include <iostream>
 #include <sched.h>      
 #include <sys/wait.h>   
@@ -78,7 +79,7 @@ void Container::run() {
     pid_t child_pid = clone(
         child_func, 
         child_stack.data() + STACK_SIZE, 
-        CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, 
+        CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWNET | SIGCHLD, 
         &args
     );
 
@@ -101,6 +102,8 @@ void Container::run() {
         kill(child_pid, SIGKILL);
         return;
     }
+
+
     close(pipe_fds[1]);
 
     Monitor monitor;
