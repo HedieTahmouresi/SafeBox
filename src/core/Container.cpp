@@ -36,10 +36,12 @@ int Container::child_func(void* arg) {
 }
 
 void Container::run_child() {
+    Logger::log("[Child] Configuring environment...", Logger::Level::INFO);
+
     Filesystem::setup("../rootfs");
 
     if (sethostname(config.hostname.c_str(), config.hostname.size()) < 0) {
-        Logger::log("[Child] Failed to set hostname.", Logger::Level::ERROR);
+        std::cerr << "[Child] Failed to set hostname: " << strerror(errno) << std::endl;
     }
 
     Security::enable_seccomp();
@@ -50,15 +52,19 @@ void Container::run_child() {
     }
     args.push_back(nullptr); 
 
-    Logger::log("[Child] Executing: " + config.command[0], Logger::Level::INFO);
     execvp(args[0], args.data());
 
-    Logger::log("[Child] execvp failed: " + std::string(strerror(errno)), Logger::Level::ERROR);
+    std::cerr << "[Child] CRITICAL: execvp failed: " << strerror(errno) << std::endl;
     exit(1);
 }
 
 void Container::run() {
-    Logger::log("[Parent] Creating child process...", Logger::Level::INFO);
+    Logger::log("--------------------------------------------------");
+    Logger::log("[Parent] Starting new container session.", Logger::Level::INFO);
+
+    std::string cmd_string = "";
+    for(const auto& s : config.command) cmd_string += s + " ";
+    Logger::log("[Parent] Requested Command: " + cmd_string, Logger::Level::INFO);
 
     int pipe_fds[2];
     if (pipe(pipe_fds) == -1) {
@@ -68,12 +74,14 @@ void Container::run() {
 
     CloneArgs args = { this, pipe_fds[0] };
 
+
     pid_t child_pid = clone(
         child_func, 
         child_stack.data() + STACK_SIZE, 
         CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, 
         &args
     );
+
 
     if (child_pid == -1) {
         Logger::log("[Parent] clone() failed: " + std::string(strerror(errno)), Logger::Level::ERROR);
@@ -85,6 +93,8 @@ void Container::run() {
     close(pipe_fds[0]);
 
     if (CGroupManager::setup(child_pid, config.memory_limit, config.cpu_limit)) {
+
+        Logger::log("[Parent] Resources limited successfully.", Logger::Level::INFO);
         write(pipe_fds[1], "X", 1);
     } else {
         Logger::log("[Parent] CGroup setup failed. Killing child.", Logger::Level::ERROR);
@@ -96,11 +106,13 @@ void Container::run() {
     Monitor monitor;
     monitor.start(); 
 
+    Logger::log("[Parent] Waiting for child process...", Logger::Level::INFO);
     waitpid(child_pid, nullptr, 0);
 
     monitor.stop(); 
 
-    Logger::log("[Parent] Child exited.");
+    Logger::log("[Parent] Child exited. Session complete.");
+    Logger::log("--------------------------------------------------");
 
     CGroupManager::cleanup();
 }
